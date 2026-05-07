@@ -8,8 +8,8 @@ READ_STRING MACRO BUF
     ; which is what this macro requires
     MOV AH, 0AH
     INT 21H
-    POP DX
     POP AX
+    POP DX
     ; push and pop registers so as to not overwrite them
 ENDM
 
@@ -39,4 +39,3 @@ PRINT_CHAR MACRO CHAR ; we will use this to print a number
     POP AX
 
 ENDM
-
