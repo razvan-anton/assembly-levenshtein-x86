@@ -120,6 +120,148 @@ PRINT_DEC_NUMBER PROC FAR ; we will use the PRINT CHAR MACRO for this
     RET 2
 PRINT_DEC_NUMBER ENDP
 
+; push FILE_HANDLE and BUFFER_ADDR before calling
+;returns length in AX
+READ_WORD_FROM_FILE PROC FAR
+    PUSH BP
+    MOV BP,SP
+    PUSH BX
+    PUSH CX
+    PUSH SI
+
+    MOV BX,[BP+8] ; move buff addr to BX
+    MOV AX,[BP+6]
+    XOR SI,SI
+
+    WHILE_READ:
+        READ_FILE AX, 1, [BX+SI]
+        
+        CMP AX,0 ; if there is no CR/LF or nothing left to read
+        JE STOP_READ
+
+        ; check if we found CR / LF
+        CMP byte PTR [BX+SI],0AH  
+        JE STOP_READ
+        CMP BYTE PTR [BX+SI],0DH
+        JE STOP_READ
+
+        CMP SI,64 ; if input is too long
+        JE STOP_READ
+
+        INC SI
+        JMP WHILE_READ
+
+    STOP_READ:
+
+    MOV AX,SI
+
+    POP SI
+    POP CX
+    POP BX
+    POP BP
+    RET 4
+READ_WORD_FROM_FILE ENDP
+
+
+;before calling, push: File handle, buffer address, length
+WRITE_STRING_FILE PROC FAR
+    PUSH BP
+    MOV BP,SP
+    PUSH AX
+    PUSH BX
+    PUSH CX
+
+    ; retrieve parameters
+    MOV DX,[BP+6] ; length
+    MOV BX,[BP+8]   ; addr
+    MOV CX,[BP+10] ; file handle
+    WRITE_FILE CX,DX,[BX] ; used [BX] and not BX cuz in the macro we call LEA
+
+
+    POP CX
+    POP BX
+    POP AX
+    POP BP
+
+    RET 6
+WRITE_STRING_FILE ENDP
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ; store res in AX;
 ;before call: push: len(b),addr(b),len(a),addr(a)
@@ -353,7 +495,6 @@ LEV PROC FAR
         POP BP
 
         RET 8
-
 LEV ENDP
 
 
