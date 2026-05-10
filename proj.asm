@@ -6,7 +6,7 @@ DATA SEGMENT PARA PUBLIC 'DATA'
     ; 13 10 are the CRLF, added for better readability in console
     MSG_MENU   DB 13, 10, "Choose operating mode (intr/stat/tri/q): $"
     MSG_INTR   DB 13, 10, "Input two words separated by ENTER or input Q to exit", 13, 10, "$"
-    MSG_STAT   DB 13, 10, "Input two file names (W2C, DICT) separated by space", 13, 10, "$"
+    MSG_STAT   DB 13, 10, "Input two file names (Words 2 Check, DICT) separated by space", 13, 10, "$"
     MSG_TRI    DB 13, 10, "Input three words separated by ENTER or input Q to exit", 13, 10, "$"
     MSG_LEV    DB 13, 10, "The Levenshtein distance is: $"
     MSG_SDONE  DB 13, 10, "The similarity matrix is saved in result.csv", 13, 10, "$"
@@ -15,20 +15,22 @@ DATA SEGMENT PARA PUBLIC 'DATA'
     COMMA   DB ','
     CRLF    DB 13, 10      
     CRLF_D  DB 13,10, "$"   ; when I need the dollar sign to print to screen
-    NF      DB "N/F"         
+    NF      DB "N/F"   
+
+    MAX_SIZE DW 66  
     
-    FILE_RES   DB "result.csv", 0  
+    FILENAME_RES   DB "result.csv", 0  
     ; H stands for Handle
     H_W2C      DW ?                
     H_DICT     DW ?                
     H_RES      DW ?                
     
-    IN_MENU    DB 6, ?, 6 DUP(0)   
-    IN_WORD_A  DB 66, ?, 66 DUP(0) 
-    IN_WORD_B  DB 66, ?, 66 DUP(0)
-    IN_WORD_C  DB 66, ?, 66 DUP(0) 
+    IN_MENU     DB 6, ?, 6 DUP(0)   
+    IN_WORD_A   DB 66, ?, 66 DUP(0) 
+    IN_WORD_B   DB 66, ?, 66 DUP(0)
+    IN_WORD_C   DB 66, ?, 66 DUP(0) 
+    IN_FILENAME DB 66, ?, 66 DUP(0)
 
-    
     BUF_W2C    DB 66 DUP(0)        
     BUF_DICT   DB 66 DUP(0)        
     BUF_SCORE  DB 4 DUP(0)         
@@ -46,7 +48,7 @@ MOV DS, AX
 PUSH AX
 MOV AX, DATA
 MOV DS, AX
-EXTRN CLEAR_BUFFER:FAR, CHECK_Q:FAR, MAKE_LOWERCASE:FAR, LEV:FAR, PRINT_DEC_NUMBER:FAR
+EXTRN CLEAR_BUFFER:FAR, CHECK_Q:FAR, MAKE_LOWERCASE:FAR, LEV:FAR, PRINT_DEC_NUMBER:FAR, GET_FILENAMES:FAR
 ; your code starts here
 
 START_MENU:
@@ -166,10 +168,61 @@ START_MENU:
 
             JMP INTERACTIVE ; go back
 
-        
-
     STATISTICS:
+        ; parse input:
+        PRINT_STRING MSG_STAT
+        READ_STRING IN_FILENAME
+        PUSH OFFSET IN_FILENAME
+        CALL GET_FILENAMES
+        ; words to check: in BX
+        ; dictionary: in AX
 
+        ; open files and store their handles;
+        ; handles var names:     H_W2C      H_DICT        H_RES   
+        OPEN_FILE AX
+        MOV H_DICT,AX
+        OPEN_FILE BX
+        MOV H_W2C,AX
+        CREATE_FILE FILENAME_RES
+        MOV H_RES,AX
+
+        STAT_OUTER_LOOP:
+            ; 0 out the buffer before every read
+            PUSH OFFSET BUF_W2C
+            PUSH MAX_SIZE
+            CALL CLEAR_BUFFER
+
+            ;read word from file
+            PUSH OFFSET BUF_W2C
+            PUSH H_W2C
+            CALL READ_WORD_FROM_FILE
+            TEST AX,AX ; check if AX==0 ( AX being amount read)
+            ; if nothing is read, we have reached the end
+            JNZ WRITE_TO_FILE
+
+            JMP STAT_CLEANUP
+
+            WRITE_TO_FILE:
+                ;write the word and a come ( csv format )
+                PUSH H_RES
+                PUSH OFFSET BUF_W2C
+                PUSH AX ; word size
+                CALL WRITE_STRING_FILE
+                ; to write the comma
+                WRITE_CHAR_FILE H_RES, COMMA
+
+            STAT_INNER_LOOP:
+
+
+
+
+
+
+        STAT_CLEANUP:
+            ; close files
+            CLOSE_FILE H_W2C
+            CLOSE_FILE H_DICT
+            CLOSE_FILE H_RES
     TRIANGLE:
 
     EXIT_Q:
