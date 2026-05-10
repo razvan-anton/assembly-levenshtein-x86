@@ -1,13 +1,29 @@
 ; Anton Razvan-Stefan ; Group 30415
 
+; READ_STRING BUF 
+; PRINT_STRING MESSAGE                           ; before calling this, string HAS to end with $ or better: 13, 10, '$' (CRLF)
+; PRINT_CHAR CHAR                                ; we will use this to print a number
+; OPEN_FILE FILENAME                             ; AX will have the filehandle / error code
+; CREATE_FILE FILENAME                           ; AX will have the filehandle / error code
+; READ_FILE FILE_HANDLE, BYTES_TO_READ, BUFFER   ; AX will have bytes read / error code
+; WRITE_FILE FILE_HANDLE, BYTES_TO_WRITE, DATA   ; AX will have bytes written / error code
+; CLOSE_FILE FILE_HANDLE                         ; AX WILL HAVE ERROR CODE
+; WRITE_CHAR_FILE FILE_HANDLE, CHAR              ; AX will have error code / 1 if success
+; SEEK_START FILE_HANDLE                         ; moves the file pointer to the start of the file
+; SEEK_END FILE_HANDLE                           ; moves the file pointer to the END of the file
+
 
 READ_STRING MACRO BUF
     PUSH DX
     PUSH AX
+
+    XOR AX,AX
+
     LEA DX,BUF  ; moves the memory location of the buffer into DX,
     ; which is what this macro requires
     MOV AH, 0AH
     INT 21H
+
     POP AX
     POP DX
     ; push and pop registers so as to not overwrite them
@@ -109,6 +125,7 @@ CLOSE_FILE MACRO FILE_HANDLE
     
     MOV AH,3EH
     MOV BX,FILE_HANDLE
+    INT 21H
 
     POP BX
 ENDM

@@ -5,10 +5,10 @@ INCLUDE maclib.asm
  ; for the linker so other fiels have access to it
  ;helper comments after each proc so I don't have to scroll this every time I forget the order of args
 
-PUBLIC CHECK_Q              ; Push buffer[2], push length. Result: AX = 1 if 'Q'/'q', else 0.
+PUBLIC CHECK_Q              ; Push first_char, push length. Result: AX = 1 if 'Q'/'q', else 0.
 PUBLIC MAKE_LOWERCASE       ; Push buffer addr. Result: Modifies buffer in-place.
 PUBLIC PRINT_DEC_NUMBER     ; Push integer. Result: Outputs directly to console.
-PUBLIC LEV                  ; Push len(b), ptr(b), len(a), ptr(a). Result: AX = Lev dist
+PUBLIC LEV                  ; Push len(b), ptr(b), len(a), ptr(a). Result: DL = Lev dist
 PUBLIC WRITE_STRING_FILE    ; Push file handle, buffer addr, length. Result: Writes to file.
 PUBLIC READ_WORD_FROM_FILE  ; Push buffer addr, file handle. Result: AX = string length read.
 PUBLIC MAX                  ; Push num1, num2. Result: AX = maximum of the two.
@@ -20,19 +20,17 @@ PUBLIC CLEAR_BUFFER         ; Push buffer addr, length. Result: Memory block zer
 CODE SEGMENT PARA PUBLIC 'CODE'
     ASSUME CS:CODE
 
-;push buffer[2] on stack before call (first char ), and length: buffer[1]
+;push first_char on stack before call (first char ), and length: buffer[1]
 CHECK_Q PROC FAR
     PUSH BP
     MOV BP,SP
-
-    MOV BL,[BP+8] ; buffer[1]
-    MOV BH, [BP+6] ; length
-
-    PUSH AX
     PUSH BX
 
-    XOR AX,AX
+    MOV BL,[BP+8] ; first_char
+    MOV BH, [BP+6] ; length
 
+
+    XOR AX,AX
 
     CMP BH, 1   ; length has to be 1 for the jump
     JNE END_PROC_CHECK_Q
@@ -50,7 +48,6 @@ CHECK_Q PROC FAR
     END_PROC_CHECK_Q:
         ; if AX is 1, we found q; if AX is 0, we didn't
         POP BX
-        POP AX
         POP BP
         RET 4
 CHECK_Q ENDP
@@ -60,12 +57,13 @@ CHECK_Q ENDP
 MAKE_LOWERCASE PROC FAR
     PUSH BP
     MOV BP,SP
-    MOV BX, [BP+6] ; buffer address
 
     PUSH AX
     PUSH BX
     PUSH CX
     PUSH SI
+
+    MOV BX, [BP+6] ; buffer address
 
     MOV SI,1
     XOR CX,CX
@@ -104,6 +102,7 @@ PRINT_DEC_NUMBER PROC FAR ; we will use the PRINT CHAR MACRO for this
 
     PUSH BX
     PUSH DX
+    PUSH CX
 
     ; note: we don't need a loop since the max number of digits is 2
 
@@ -112,16 +111,18 @@ PRINT_DEC_NUMBER PROC FAR ; we will use the PRINT CHAR MACRO for this
     DIV BL ; AH will have the remainder ( unit ), AL will have the 'zeci'
 
     CMP AL,0
+    MOV CX,AX
     JE PRINT_UNIT
 
     ADD AL,30h
-    PRINT_CHAR AL ; to convert to ascii
+    MOV CX,AX
+    PRINT_CHAR CL ; to convert to ascii
 
     PRINT_UNIT:
-        ADD AH,30h
-        PRINT_CHAR AH
+        ADD CH,30h
+        PRINT_CHAR CH
 
-
+    POP CX
     POP DX
     POP BX
     POP AX
@@ -236,7 +237,7 @@ CALC_SIMILARITY PROC FAR
     PUSH DX
     PUSH CX
     PUSH BX
-    CALL LEV
+    CALL FAR PTR LEV
 
     ; now AX has lev(a,b)
     MOV BX,AX 
@@ -252,7 +253,7 @@ CALC_SIMILARITY PROC FAR
     MOV CX,AX ; for division to keep max
     OR CX,CX
 
-    JNZ CONTINUE_PROC_CALC_SIMILARITY: ; if both are of len 0 we can't divide by 0;
+    JNZ CONTINUE_PROC_CALC_SIMILARITY ; if both are of len 0 we can't divide by 0;
     ; in that case similarity would be 100
     MOV AX,100
     JMP END_PROC_CALC_SIMILARITY
@@ -369,16 +370,16 @@ CLEAR_BUFFER ENDP
 
 
 
-; store res in AX;
+; store res in DL!;
 ;before call: push: len(b),addr(b),len(a),addr(a)
 ; like a C++ string_view ( pointer and length )
-; make AX 0 before this call in main
+; make DX 0 before this call in main
 LEV PROC FAR
     PUSH BP
     MOV BP,SP
     PUSH BX
     PUSH CX
-    PUSH DX
+    PUSH AX
     PUSH SI
     PUSH DI
 
@@ -398,10 +399,10 @@ LEV PROC FAR
     JNE NOT_END_A_0
     ; we return here; jump too far to JMp to END
     ; in this case the answer is len(b)
-    MOV AX,[BP+12]
+    MOV DX,[BP+12]
     POP DI
     POP SI
-    POP DX
+    POP AX
     POP CX
     POP BX
     POP BP
@@ -414,7 +415,7 @@ LEV PROC FAR
     CMP DI,0
     JNE NOT_END_B_0
     ; ret again, ans is len(a)
-    MOV AX,[BP+8]
+    MOV DX,[BP+8]
     JMP END_PROC_LEV
 
     NOT_END_B_0:
@@ -460,7 +461,7 @@ LEV PROC FAR
     PUSH BX
 
     CALL LEV
-    ;also end here to 'return' AX
+    ;also end here to 'return' DX
     JMP END_PROC_LEV
 
     XOR BX,BX
@@ -471,9 +472,9 @@ LEV PROC FAR
     ;lev (a,tail(b))
     ; lev(tail(a),tail(b))
 
-    ;workflow: 1: call first lev, push AX to stack
-    ; 2: call 2nd lev, pop AX into BX and cmp them; then put the min into AX and push it
-    ; 3: call 3rd lev, pop AX into BX, cmp them, store min in AX
+    ;workflow: 1: call first lev, push DX to stack
+    ; 2: call 2nd lev, pop DX into BX and cmp them; then put the min into DX and push it
+    ; 3: call 3rd lev, pop DX into BX, cmp them, store min in DX
     ; inc AX
     ; exit
 
@@ -506,7 +507,7 @@ LEV PROC FAR
     XOR BX,BX
 
     CALL LEV
-    PUSH AX
+    PUSH DX
     ; step 1 completed
 
     ; now we need to call lev (a,tail(b))
@@ -538,15 +539,15 @@ LEV PROC FAR
     XOR BX,BX
 
     CALL LEV
-    POP BX ; now the val of AX pushed eariler SHOULD be here 
+    POP BX ; now the val of DX pushed eariler SHOULD be here 
     
     ; push the min(AX,BX)
-    CMP AX,BX
+    CMP DX,BX
     JL SKIP_LESS_1
-    MOV AX,BX
+    MOV DX,BX
 
     SKIP_LESS_1:
-    PUSH AX
+    PUSH DX
 
     ;step 2 complete
     ;now we have to call lev(tail(a),tail(b))
@@ -582,20 +583,20 @@ LEV PROC FAR
     CALL LEV
     POP BX ; put the old min into BX to compare
 
-    ; put min into AX and exit
-    CMP AX,BX
+    ; put min into DX and exit
+    CMP DX,BX
     JL SKIP_LESS_2
-    MOV AX,BX
+    MOV DX,BX
 
     SKIP_LESS_2:
 
-    INC AX
+    INC DX
 
 
     END_PROC_LEV:
         POP DI
         POP SI
-        POP DX
+        POP AX
         POP CX
         POP BX
         POP BP
