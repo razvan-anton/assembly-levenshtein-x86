@@ -15,10 +15,60 @@ PUBLIC MAX                  ; Push num1, num2. Result: AX = maximum of the two.
 PUBLIC CALC_SIMILARITY      ; Push len(b), ptr(b), len(a), ptr(a). Result: AX = similarity percentage (0-100).
 PUBLIC INT_TO_STRING        ; Push buffer addr, integer. Result: AX = length of ASCII string.
 PUBLIC CLEAR_BUFFER         ; Push buffer addr, length. Result: Memory block zeroed.
+PUBLIC GET_FILENAMES        ; push read address, AX and BX will have ptrs to the filenames (BX 1st file, AX 2nd )
 
 
 CODE SEGMENT PARA PUBLIC 'CODE'
     ASSUME CS:CODE
+
+; pusj aaddr before calling, AX and BX will have the ptr to start of the 2 filenames (BX 1st file, AX 2nd )
+GET_FILENAMES PROC FAR
+    PUSH BP
+    MOV BP,SP
+    PUSH CX
+    PUSH DX
+    PUSH SI
+
+    MOV BX,[BP+6]
+    ADD BX,2 ; cuz first word starts at addr+2
+    XOR SI,SI
+    ;loop until we find space, then replace it with 00
+
+    LOOP_FIND_SPACE:
+        CMP byte ptr [BX+SI],20h ; ascii for space
+        JNE NOT_FOUND_SPACE1
+        ;filenames need to be terminated with 00, that's why we replace here
+        MOV [BX+SI],0
+        INC SI
+        LEA AX,[BX+SI] ; add addr pf 2nd file to AX
+        JMP LOOP_FIND_CRLF
+        ; since user input is correct, we don't need to handle the case where there are more spaces
+        ; or where there aren't any spaces
+
+        NOT_FOUND_SPACE1:
+        INC SI
+        JMP LOOP_FIND_SPACE
+
+    ; loop until we find enter, then replace with 00
+    LOOP_FIND_CLRF:
+        CMP byte ptr [BX+SI],0Dh ; ascii for CR
+        JNE NOT_FOUND_SPACE2
+        ;filenames need to be terminated with 00, that's why we replace here
+        MOV [BX+SI],0
+        JMP END_PROC_FILENAMES
+
+        NOT_FOUND_SPACE2:
+        INC SI
+        JMP LOOP_FIND_CRLF
+
+    END_PROC_FILENAMES:
+
+    POP SI
+    POP DX
+    POP CX
+    POP BP
+    RET 2
+ENDP
 
 ;push first_char on stack before call (first char ), and length: buffer[1]
 CHECK_Q PROC FAR
