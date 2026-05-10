@@ -1,14 +1,15 @@
 ; Anton Razvan-Stefan ; Group 30415
 
-
 INCLUDE maclib.asm
-
 
 DATA SEGMENT PARA PUBLIC 'DATA'
     BUFFER1 DB 67 DUP (0)
     BUFFER2 DB 67 DUP (0)
-    TEST1 DB "kitten"
-    TEST2 DB "sitting""
+    TEST1 DB "algorithm"
+    TEST2 DB "complexity"
+    LENGTH1 DW 9
+    FNAME DB "test.csv", 0
+    FHANDLE DW ?
 DATA ENDS
 
 ; Macro declaration zone
@@ -31,14 +32,18 @@ MOV DS, AX
 ;MOV BUFFER1[SI],AL
 ;READ_STRING BUFFER1
 
-; for testing the lev proc:
 EXTRN LEV:FAR
+EXTRN WRITE_STRING_FILE:FAR
 
-PUSH 7
-PUSH OFFSET TEST2
-PUSH 6
+CREATE_FILE FNAME    
+MOV FHANDLE, AX         
+
+PUSH FHANDLE         
 PUSH OFFSET TEST1
-CALL LEV
+PUSH LENGTH1
+CALL WRITE_STRING_FILE
+
+CLOSE_FILE FHANDLE      
 
 
 ; your code ends here
