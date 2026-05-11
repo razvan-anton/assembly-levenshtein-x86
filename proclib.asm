@@ -38,7 +38,7 @@ GET_FILENAMES PROC FAR
         CMP byte ptr [BX+SI],20h ; ascii for space
         JNE NOT_FOUND_SPACE1
         ;filenames need to be terminated with 00, that's why we replace here
-        MOV [BX+SI],0
+        MOV byte ptr [BX+SI],0
         INC SI
         LEA AX,[BX+SI] ; add addr pf 2nd file to AX
         JMP LOOP_FIND_CRLF
@@ -50,11 +50,11 @@ GET_FILENAMES PROC FAR
         JMP LOOP_FIND_SPACE
 
     ; loop until we find enter, then replace with 00
-    LOOP_FIND_CLRF:
+    LOOP_FIND_CRLF:
         CMP byte ptr [BX+SI],0Dh ; ascii for CR
         JNE NOT_FOUND_SPACE2
         ;filenames need to be terminated with 00, that's why we replace here
-        MOV [BX+SI],0
+        MOV byte ptr [BX+SI],0
         JMP END_PROC_FILENAMES
 
         NOT_FOUND_SPACE2:
@@ -68,7 +68,7 @@ GET_FILENAMES PROC FAR
     POP CX
     POP BP
     RET 2
-ENDP
+GET_FILENAMES ENDP
 
 ;push first_char on stack before call (first char ), and length: buffer[1]
 CHECK_Q PROC FAR
@@ -182,42 +182,69 @@ PRINT_DEC_NUMBER ENDP
 
 ; push FILE_HANDLE and BUFFER_ADDR before calling
 ;returns length in AX
+; rewritten cuz the READ_FILE macro I was using before was overwritting my registers
 READ_WORD_FROM_FILE PROC FAR
     PUSH BP
     MOV BP,SP
-    PUSH BX
+    PUSH DI
     PUSH CX
     PUSH SI
+    PUSH DX
 
-    MOV BX,[BP+8] ; move buff addr to BX
-    MOV AX,[BP+6]
+    MOV DI,[BP+8] ; move buff addr to DI
+    MOV DX,[BP+6] ; handle
     XOR SI,SI
 
     WHILE_READ:
-        READ_FILE AX, 1, [BX+SI]
+        ; dos read macro
+        MOV AH, 3FH      
+        MOV BX, DX        
+        MOV CX, 1           ; read 1 byte only
         
-        CMP AX,0 ; if there is no CR/LF or nothing left to read
-        JE STOP_READ
+        ; calc address manually
+        MOV DX, DI         
+        ADD DX, SI       
+        INT 21H        
+        
+        ; restore handle to DX cuz it was overwritten
+        MOV DX, [BP+6]     
 
-        ; check if we found CR / LF
-        CMP byte PTR [BX+SI],0AH  
-        JE STOP_READ
-        CMP BYTE PTR [BX+SI],0DH
-        JE STOP_READ
+        CMP AX,0 ; check if there is nothing left to read
+        JE END_PROC_READ_WORD
 
+        MOV BX, DI         
+        ADD BX, SI       ; calc address of the byte just read and store it in AL to check it
+        MOV AL, [BX]       
+
+        ; check if we found CR / LF / Space
+        CMP AL, 0AH         
+        JE STOP_READ     
+        CMP AL, 0DH        
+        JE STOP_READ     
+        CMP AL, 20H         
+        JE STOP_READ     
+
+        ; if we are here, it is a normal letter
         CMP SI,64 ; if input is too long
-        JE STOP_READ
-
+        JE END_PROC_READ_WORD
+        
+        NEXT_ITER_READ:
         INC SI
         JMP WHILE_READ
 
     STOP_READ:
+        ;If SI is 0, we found a space BEFORE the word starts
+        CMP SI, 0    
+        JE WHILE_READ       ; if CR /LF/SPace was the first byte read, read again
+        
+        JMP END_PROC_READ_WORD 
 
+    END_PROC_READ_WORD:
     MOV AX,SI
-
+    POP DX
     POP SI
     POP CX
-    POP BX
+    POP DI
     POP BP
     RET 4
 READ_WORD_FROM_FILE ENDP
