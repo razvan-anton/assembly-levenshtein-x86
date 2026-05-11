@@ -68,6 +68,18 @@ OPEN_FILE MACRO FILENAME
     POP DX
 ENDM
 
+; same as the above, but can take a register as arg
+OPEN_FILE_REG MACRO REG
+    PUSH DX
+
+    MOV DX,REG
+    XOR AL,AL
+    MOV AH,3DH
+    INT 21H
+
+    POP DX
+ENDM
+
 ; AX will have the filehandle / error code
 CREATE_FILE MACRO FILENAME
     PUSH DX
@@ -100,6 +112,7 @@ READ_FILE MACRO FILE_HANDLE, BYTES_TO_READ, BUFFER
     POP CX
     POP BX
 ENDM
+
 
 ; AX will have bytes written / error code
 WRITE_FILE MACRO FILE_HANDLE, BYTES_TO_WRITE, DATA

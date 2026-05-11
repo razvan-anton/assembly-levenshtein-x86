@@ -293,7 +293,6 @@ MAX PROC FAR
     RET 4
 MAX ENDP
 
-
 ; before calling, push: len(b), ptr b, len(a), ptr a
 CALC_SIMILARITY PROC FAR
     ; this implements the formula:
@@ -302,25 +301,33 @@ CALC_SIMILARITY PROC FAR
     MOV BP,SP
     PUSH BX
     PUSH CX
-    PUSH DX
+    PUSH DX          ; !!! Protect DX because LEV uses it
     PUSH SI
+    PUSH DI          ; !!! Replaced non-existent AC with DI
 
-    MOV BX,[BP+6] ; ptr a
-    MOV CX,[BP+8] ; len(a)
-    MOV DX,[BP+10] ; ptr b
-    MOV SI,[BP+12] ; len(b)
+    MOV BX,[BP+6]    ; ptr a
+    MOV CX,[BP+8]    ; len(a)
+    MOV DI,[BP+10]   ; ptr b (Replaced AC)
+    MOV SI,[BP+12]   ; len(b)
 
     PUSH SI
-    PUSH DX
+    PUSH DI          ; ptr b
     PUSH CX
     PUSH BX
     CALL FAR PTR LEV
 
-    ; now AX has lev(a,b)
-    MOV BX,AX 
+    ; now DX has lev(a,b)
+    
+    ; !!! We must park the LEV result on the stack because MAX overwrites registers
+    PUSH DX          
+
     PUSH CX
     PUSH SI
     CALL MAX
+    ;now AX has max
+
+    ; !!! Retrieve the LEV result into BX for the math
+    POP BX           
     ;now AX has max and BX has lev
 
     ; we will bring to common denominator and perform:
@@ -336,24 +343,21 @@ CALC_SIMILARITY PROC FAR
     JMP END_PROC_CALC_SIMILARITY
 
     CONTINUE_PROC_CALC_SIMILARITY:
-    SUB AX,BX
-    MOV BL,100
-    MUL BL
-    DIV CL
+    SUB AX,BX        ; !!! AX = Max - Lev
+    MOV BL,100       ; !!! Set multiplier
+    MUL BL           ; !!! AX = AL * 100 (Math is now scaled)
+    DIV CL           ; !!! AX / CL -> AL (Quotient), AH (Remainder)
     XOR AH,AH ; to get rid of the remainder
 
-
-
     END_PROC_CALC_SIMILARITY:
+    POP DI
     POP SI
     POP DX
     POP CX
     POP BX
     POP BP
 
-
     RET 8
-
 CALC_SIMILARITY ENDP
 
 ; before calling, push int and buffer addr
