@@ -31,9 +31,14 @@ DATA SEGMENT PARA PUBLIC 'DATA'
     IN_WORD_C   DB 66, ?, 66 DUP(0) 
     IN_FILENAME DB 66, ?, 66 DUP(0)
 
-    BUF_W2C    DB 66 DUP(0)        
-    BUF_DICT   DB 66 DUP(0)        
-    BUF_SCORE  DB 4 DUP(0)         
+    BUF_W2C         DB 66 DUP(0)        
+    BUF_DICT        DB 66 DUP(0)        
+    BUF_SCORE       DB 4 DUP(0)
+    BUF_BEST_MATCH  DB 66 DUP(0)  
+    BEST_MATCH_LEN  DW 0
+
+    W2C_WORD_LEN DW ?
+    DICT_WORD_LEN DW ?         
 DATA ENDS
 ; Macro declaration zone
 
@@ -49,6 +54,7 @@ PUSH AX
 MOV AX, DATA
 MOV DS, AX
 EXTRN CLEAR_BUFFER:FAR, CHECK_Q:FAR, MAKE_LOWERCASE:FAR, LEV:FAR, PRINT_DEC_NUMBER:FAR, GET_FILENAMES:FAR
+EXTRN READ_WORD_FROM_FILE:FAR, WRITE_STRING_FILE:FAR,CALC_SIMILARITY:FAR,INT_TO_STRING:FAR
 ; your code starts here
 
 START_MENU:
@@ -168,26 +174,30 @@ START_MENU:
 
             JMP INTERACTIVE ; go back
 
-    STATISTICS:
+STATISTICS:
         ; parse input:
         PRINT_STRING MSG_STAT
         READ_STRING IN_FILENAME
+        PRINT_STRING CRLF_D
         PUSH OFFSET IN_FILENAME
         CALL GET_FILENAMES
         ; words to check: in BX
         ; dictionary: in AX
 
-        ; open files and store their handles;
-        ; handles var names:     H_W2C      H_DICT        H_RES   
-        OPEN_FILE AX
-        MOV H_DICT,AX
-        OPEN_FILE BX
-        MOV H_W2C,AX
-        CREATE_FILE FILENAME_RES
-        MOV H_RES,AX
+        ; double store the dict handle
+        MOV SI, AX
 
+        ; open files and store their handles;
+        OPEN_FILE_REG SI         
+        MOV H_DICT, AX
+        OPEN_FILE_REG BX          ; Open W2C
+        MOV H_W2C, AX
+        CREATE_FILE FILENAME_RES
+        MOV H_RES, AX
+        
         STAT_OUTER_LOOP:
             ; 0 out the buffer before every read
+            XOR CX, CX
             PUSH OFFSET BUF_W2C
             PUSH MAX_SIZE
             CALL CLEAR_BUFFER
@@ -196,33 +206,134 @@ START_MENU:
             PUSH OFFSET BUF_W2C
             PUSH H_W2C
             CALL READ_WORD_FROM_FILE
-            TEST AX,AX ; check if AX==0 ( AX being amount read)
-            ; if nothing is read, we have reached the end
+            TEST AX, AX ; check if AX==0 ( AX being amount read)
             JNZ WRITE_TO_FILE
-
             JMP STAT_CLEANUP
 
             WRITE_TO_FILE:
-                ;write the word and a come ( csv format )
+                ;write the word and a comma ( csv format )
+                MOV W2C_WORD_LEN, AX
                 PUSH H_RES
                 PUSH OFFSET BUF_W2C
                 PUSH AX ; word size
                 CALL WRITE_STRING_FILE
-                ; to write the comma
+                
                 WRITE_CHAR_FILE H_RES, COMMA
 
             STAT_INNER_LOOP:
+                ; clear dict buffer and read word
+
+                XOR AX, AX
+                PUSH OFFSET BUF_DICT
+                PUSH MAX_SIZE
+                CALL CLEAR_BUFFER
+                PUSH OFFSET BUF_DICT
+                PUSH H_DICT
+                CALL READ_WORD_FROM_FILE
+                TEST AX, AX 
+                ;check for end of line
+                JNZ CALC_SIMILARITY_LABEL
+                JMP END_INNER_LOOP 
+
+                CALC_SIMILARITY_LABEL:
+                    MOV DICT_WORD_LEN, AX
+                    
+                    ;calc similarity
+                    PUSH DICT_WORD_LEN
+                    PUSH OFFSET BUF_DICT
+                    PUSH W2C_WORD_LEN
+                    PUSH OFFSET BUF_W2C
+                    CALL CALC_SIMILARITY
+
+                    ;store the max similarity
+                    CMP AX, CX
+                    JL IS_LESS
+                    MOV CX, AX
 
 
+                    ;store the new best match word
+                    MOV BX, DICT_WORD_LEN
+                    PUSH AX
+                    PUSH BX
+                    PUSH CX
 
+                    ; clear old best match buffer
+                    LEA DI, BUF_BEST_MATCH
+                    MOV CX, MAX_SIZE
+                    CLEAR_LOOP:
+                        MOV BYTE PTR [DI], 0
+                        INC DI
+                        LOOP CLEAR_LOOP
 
+                    ; string copy
+                    LEA SI, BUF_DICT
+                    LEA DI, BUF_BEST_MATCH
+                    MOV CX, BX
+                    COPY_LOOP:
+                        MOV AL, [SI]
+                        MOV [DI], AL
+                        INC SI
+                        INC DI
+                        LOOP COPY_LOOP
 
+                    POP CX
+                    POP BX
+                    POP AX
+
+                    MOV BEST_MATCH_LEN, BX
+                    
+                    ; bx now hold new best match word len
+                    MOV BX, DICT_WORD_LEN
+                    
+                    IS_LESS:
+                    ;now make the interger ( which is in AX ) an INT
+                    PUSH OFFSET BUF_SCORE
+                    PUSH AX
+                    CALL INT_TO_STRING ; AX will have the length of the num
+
+                    ;write the num and comma to file:
+                    PUSH H_RES
+                    PUSH OFFSET BUF_SCORE
+                    PUSH AX
+                    CALL WRITE_STRING_FILE
+                    WRITE_CHAR_FILE H_RES, COMMA
+
+                    JMP STAT_INNER_LOOP ; loop again
+
+            END_INNER_LOOP:
+                CMP CX, 75
+                JG WRITE_NUM
+                
+                ; write best match if  > 75, else NF
+
+                PUSH H_RES
+                PUSH OFFSET NF
+                PUSH 3 
+                CALL WRITE_STRING_FILE
+                JMP WRITE_ENTER
+                
+                WRITE_NUM:
+                PUSH H_RES
+                PUSH OFFSET BUF_BEST_MATCH
+                PUSH BEST_MATCH_LEN
+                CALL WRITE_STRING_FILE
+
+                WRITE_ENTER:
+                PUSH H_RES
+                PUSH OFFSET CRLF
+                PUSH 2
+                CALL WRITE_STRING_FILE
+
+                SEEK_START H_DICT
+                JMP STAT_OUTER_LOOP
 
         STAT_CLEANUP:
-            ; close files
             CLOSE_FILE H_W2C
             CLOSE_FILE H_DICT
             CLOSE_FILE H_RES
+
+            PRINT_STRING MSG_SDONE
+            JMP START_MENU
     TRIANGLE:
 
     EXIT_Q:
