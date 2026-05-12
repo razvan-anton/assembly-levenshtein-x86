@@ -3,7 +3,7 @@
 INCLUDE maclib.asm
 
  ; for the linker so other fiels have access to it
- ;helper comments after each proc so I don't have to scroll this every time I forget the order of args
+ ;helper comments after each proc so I don't have to scroll this every time I forget the order of args to push
 
 PUBLIC CHECK_Q              ; Push first_char, push length. Result: AX = 1 if 'Q'/'q', else 0.
 PUBLIC MAKE_LOWERCASE       ; Push buffer addr. Result: Modifies buffer in-place.
@@ -15,11 +15,36 @@ PUBLIC MAX                  ; Push num1, num2. Result: AX = maximum of the two.
 PUBLIC CALC_SIMILARITY      ; Push len(b), ptr(b), len(a), ptr(a). Result: AX = similarity percentage (0-100).
 PUBLIC INT_TO_STRING        ; Push buffer addr, integer. Result: AX = length of ASCII string.
 PUBLIC CLEAR_BUFFER         ; Push buffer addr, length. Result: Memory block zeroed.
-PUBLIC GET_FILENAMES        ; push read address, AX and BX will have ptrs to the filenames (BX 1st file, AX 2nd )
+PUBLIC GET_FILENAMES        ; push read address, AX and BX will have ptrs to the filenames (BX 1st file, AX 2nd )\
+PUBLIC RUN_TRIANGLE_MODE    ; handles all triangle mode logic, to have less code in mainl; doesn't take args
+; only sets AX to 1 if user wants to quit
 
+
+; define some variables here since they will be used for the triangle inequality:
+
+; so that proclib can see the PUBLIC defined vars in proj
+EXTRN MSG_TRI:BYTE, IN_WORD_A:BYTE, IN_WORD_B:BYTE, IN_WORD_C:BYTE, CRLF_D:BYTE
+
+DATA SEGMENT PARA PUBLIC 'DATA'
+    MSG_PW_LEV      DB "Pairwise Levenshtein distances", 13, 10, "$"
+    MSG_TRI_IN      DB "Triangle inequalities", 13, 10, "$"
+    MSG_LEV_P1      DB "lev($"
+    MSG_COMMA_SP    DB ", $"
+    MSG_LEV_P2      DB ") = $"
+    MSG_PAREN_LESS  DB ") < lev($"
+    MSG_PAREN_PLUS  DB ") + lev($"
+    MSG_PAREN_COLON DB "): $"
+    MSG_LESS_SPACE  DB " < $"
+    MSG_TRUE        DB " - TRUE", 13, 10, "$"
+    MSG_FALSE       DB " - FALSE", 13, 10, "$"
+    
+    DIST_AB         DW 0
+    DIST_BC         DW 0
+    DIST_AC         DW 0
+DATA ENDS
 
 CODE SEGMENT PARA PUBLIC 'CODE'
-    ASSUME CS:CODE
+    ASSUME CS:CODE,DS:DATA
 
 ; pusj aaddr before calling, AX and BX will have the ptr to start of the 2 filenames (BX 1st file, AX 2nd )
 GET_FILENAMES PROC FAR
@@ -685,7 +710,250 @@ LEV PROC FAR
         RET 8
 LEV ENDP
 
+; sets AX to 1 if user wants to quit
+RUN_TRIANGLE_MODE PROC FAR
+    PUSH BP
+    MOV BP, SP
 
+    PRINT_STRING MSG_TRI
+    
+    ; read first word and check if it's Q
+    READ_STRING IN_WORD_A
+    XOR AX, AX
+    MOV AL, [IN_WORD_A+2] ; first letter
+    PUSH AX              
+    
+    MOV AL, [IN_WORD_A+1] ; len
+    PUSH AX
+    
+    CALL CHECK_Q
+    
+    TEST AX, AX ; if AX is 0 ( Q not found ), read the next word
+    JZ TRI_READ_B
+    MOV AX,1
+    JMP TRI_END
+    
+    TRI_READ_B:
+
+    PRINT_STRING CRLF_D
+    READ_STRING IN_WORD_B
+    PRINT_STRING CRLF_D
+    READ_STRING IN_WORD_C
+    PRINT_STRING CRLF_D
+    
+    ; punem $ la final ca sa le putem printa usor
+    XOR CH, CH
+    MOV CL, [IN_WORD_A+1]
+    LEA BX, [IN_WORD_A+2]
+    ADD BX, CX ; add start address + len to get to the end, then add dollar there
+    MOV BYTE PTR [BX], "$"
+    
+    MOV CL, [IN_WORD_B+1]
+    LEA BX, [IN_WORD_B+2]
+    ADD BX, CX
+    MOV BYTE PTR [BX], "$"
+    
+    MOV CL, [IN_WORD_C+1]
+    LEA BX, [IN_WORD_C+2]
+    ADD BX, CX
+    MOV BYTE PTR [BX], "$"
+
+    ; LEV(A, B)
+    LEA BX, [IN_WORD_B+2]
+    XOR AX, AX
+    MOV AL, [IN_WORD_B+1]
+    PUSH AX
+    PUSH BX
+    LEA BX, [IN_WORD_A+2]
+    XOR AX, AX
+    MOV AL, [IN_WORD_A+1]
+    PUSH AX
+    PUSH BX
+    XOR DX, DX
+    CALL LEV
+    MOV DIST_AB, DX ;save the distance so we dont calculate it again
+    
+    ;lev(B, C)
+    LEA BX, [IN_WORD_C+2]
+    XOR AX, AX
+    MOV AL, [IN_WORD_C+1]
+    PUSH AX
+    PUSH BX
+    LEA BX, [IN_WORD_B+2]
+    XOR AX, AX
+    MOV AL, [IN_WORD_B+1]
+    PUSH AX
+    PUSH BX
+    XOR DX, DX
+    CALL LEV
+    MOV DIST_BC, DX
+    ;same logic as before
+    
+    ; lev a,c  ; (same logic as before )
+    LEA BX, [IN_WORD_C+2]
+    XOR AX, AX
+    MOV AL, [IN_WORD_C+1]
+    PUSH AX
+    PUSH BX
+    LEA BX, [IN_WORD_A+2]
+    XOR AX, AX
+    MOV AL, [IN_WORD_A+1]
+    PUSH AX
+    PUSH BX
+    XOR DX, DX
+    CALL LEV
+    MOV DIST_AC, DX
+    
+    ; for each section we 'build' the sentence using the strings distances and defined helper print variables
+    PRINT_STRING MSG_PW_LEV
+    ; print lev(A, B)
+    PRINT_STRING MSG_LEV_P1
+    PRINT_STRING IN_WORD_A+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_B+2
+    PRINT_STRING MSG_LEV_P2
+    PUSH DIST_AB
+    CALL PRINT_DEC_NUMBER
+    PRINT_STRING CRLF_D
+    
+    ; print lev(B, C)
+    PRINT_STRING MSG_LEV_P1
+    PRINT_STRING IN_WORD_B+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_C+2
+    PRINT_STRING MSG_LEV_P2
+    PUSH DIST_BC
+    CALL PRINT_DEC_NUMBER
+    PRINT_STRING CRLF_D
+    
+    ; print lev(A, C)
+    PRINT_STRING MSG_LEV_P1
+    PRINT_STRING IN_WORD_A+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_C+2
+    PRINT_STRING MSG_LEV_P2
+    PUSH DIST_AC
+    CALL PRINT_DEC_NUMBER
+    PRINT_STRING CRLF_D
+    
+    PRINT_STRING MSG_TRI_IN
+    
+    ; Print Triangle Inequalities:
+    ; Ineq 1: A,B < A,C + B,C
+    PRINT_STRING MSG_LEV_P1
+    PRINT_STRING IN_WORD_A+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_B+2
+    PRINT_STRING MSG_PAREN_LESS
+    PRINT_STRING IN_WORD_A+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_C+2
+    PRINT_STRING MSG_PAREN_PLUS
+    PRINT_STRING IN_WORD_B+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_C+2
+    PRINT_STRING MSG_PAREN_COLON
+    
+    PUSH DIST_AB
+    CALL PRINT_DEC_NUMBER
+    PRINT_STRING MSG_LESS_SPACE
+    
+    ; calc suma pentru print si comparatie
+    MOV AX, DIST_AC
+    ADD AX, DIST_BC
+    PUSH AX
+    CALL PRINT_DEC_NUMBER
+    
+    ; check inegality
+    MOV BX, DIST_AB
+    CMP BX, AX
+    JL TRI_TRUE_1
+    PRINT_STRING MSG_FALSE
+    JMP TRI_INEQ_2
+
+    TRI_TRUE_1:
+
+    PRINT_STRING MSG_TRUE
+    
+    TRI_INEQ_2:
+    
+    ; Ineq 2: A,C < A,B + C,B
+    PRINT_STRING MSG_LEV_P1
+    PRINT_STRING IN_WORD_A+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_C+2
+    PRINT_STRING MSG_PAREN_LESS
+    PRINT_STRING IN_WORD_A+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_B+2
+    PRINT_STRING MSG_PAREN_PLUS
+    PRINT_STRING IN_WORD_C+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_B+2
+    PRINT_STRING MSG_PAREN_COLON
+    
+    PUSH DIST_AC
+    CALL PRINT_DEC_NUMBER
+    PRINT_STRING MSG_LESS_SPACE
+    
+    MOV AX, DIST_AB
+    ADD AX, DIST_BC
+    PUSH AX
+    CALL PRINT_DEC_NUMBER
+    
+    MOV BX, DIST_AC
+    CMP BX, AX
+    JL TRI_TRUE_2
+    PRINT_STRING MSG_FALSE
+    JMP TRI_INEQ_3
+
+    TRI_TRUE_2:
+
+    PRINT_STRING MSG_TRUE
+    
+    TRI_INEQ_3:
+
+    ; Ineq 3: B,C < B,A + C,A
+    PRINT_STRING MSG_LEV_P1
+    PRINT_STRING IN_WORD_B+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_C+2
+    PRINT_STRING MSG_PAREN_LESS
+    PRINT_STRING IN_WORD_B+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_A+2
+    PRINT_STRING MSG_PAREN_PLUS
+    PRINT_STRING IN_WORD_C+2
+    PRINT_STRING MSG_COMMA_SP
+    PRINT_STRING IN_WORD_A+2
+    PRINT_STRING MSG_PAREN_COLON
+    
+    PUSH DIST_BC
+    CALL PRINT_DEC_NUMBER
+    PRINT_STRING MSG_LESS_SPACE
+    
+    MOV AX, DIST_AB
+    ADD AX, DIST_AC
+    PUSH AX
+    CALL PRINT_DEC_NUMBER
+    
+    MOV BX, DIST_BC
+    CMP BX, AX
+    JL TRI_TRUE_3
+    PRINT_STRING MSG_FALSE
+    XOR AX,AX ; make AX 0 before leaving so that we can 100% certain that AX is 1 at the end only when user typed Q to quit
+    JMP TRI_END
+
+    TRI_TRUE_3:
+
+    PRINT_STRING MSG_TRUE
+    XOR AX,AX
+
+    TRI_END:
+
+    POP BP
+    RET
+RUN_TRIANGLE_MODE ENDP
 
 
 

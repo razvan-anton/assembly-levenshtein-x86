@@ -3,14 +3,16 @@
 INCLUDE maclib.asm
 
 DATA SEGMENT PARA PUBLIC 'DATA'
+    PUBLIC MSG_TRI, IN_WORD_A, IN_WORD_B, IN_WORD_C, CRLF_D ; so proclib can also see them
+
     ; 13 10 are the CRLF, added for better readability in console
-    MSG_MENU   DB 13, 10, "Choose operating mode (intr/stat/tri/q): $"
-    MSG_INTR   DB 13, 10, "Input two words separated by ENTER or input Q to exit", 13, 10, "$"
-    MSG_STAT   DB 13, 10, "Input two file names (Words 2 Check, DICT) separated by space", 13, 10, "$"
-    MSG_TRI    DB 13, 10, "Input three words separated by ENTER or input Q to exit", 13, 10, "$"
-    MSG_LEV    DB 13, 10, "The Levenshtein distance is: $"
-    MSG_SDONE  DB 13, 10, "The similarity matrix is saved in result.csv", 13, 10, "$"
-    MSG_EXIT   DB 13, 10, "Exiting...", 13, 10, "$"
+    MSG_MENU        DB 13, 10, "Choose operating mode (intr/stat/tri/q): $"
+    MSG_INTR        DB 13, 10, "Input two words separated by ENTER or input Q to exit", 13, 10, "$"
+    MSG_STAT        DB 13, 10, "Input two file names (Words 2 Check, DICT) separated by space", 13, 10, "$"
+    MSG_TRI         DB 13, 10, "Input three words separated by ENTER or input Q to exit", 13, 10, "$"
+    MSG_LEV         DB 13, 10, "The Levenshtein distance is: $"
+    MSG_SDONE       DB 13, 10, "The similarity matrix is saved in result.csv", 13, 10, "$"
+    MSG_EXIT        DB 13, 10, "Exiting...", 13, 10, "$"
     
     COMMA   DB ','
     CRLF    DB 13, 10      
@@ -55,6 +57,7 @@ MOV AX, DATA
 MOV DS, AX
 EXTRN CLEAR_BUFFER:FAR, CHECK_Q:FAR, MAKE_LOWERCASE:FAR, LEV:FAR, PRINT_DEC_NUMBER:FAR, GET_FILENAMES:FAR
 EXTRN READ_WORD_FROM_FILE:FAR, WRITE_STRING_FILE:FAR,CALC_SIMILARITY:FAR,INT_TO_STRING:FAR
+EXTRN RUN_TRIANGLE_MODE:FAR
 ; your code starts here
 
 START_MENU:
@@ -110,7 +113,9 @@ START_MENU:
         XOR AX,AX
         MOV AL,[IN_WORD_A+2] ; first char
         PUSH AX
+        XOR AX,AX
         MOV AL,[IN_WORD_A+1]  ; length ( amount read )
+        PUSH AX
         CALL CHECK_Q
 
 
@@ -128,6 +133,7 @@ START_MENU:
         XOR AX,AX
         MOV AL,[IN_WORD_B+2] ; first char
         PUSH AX
+        XOR AX,AX
         MOV AL,[IN_WORD_B+1]  ; length ( amount read )
         CALL CHECK_Q
 
@@ -197,7 +203,7 @@ STATISTICS:
         
         STAT_OUTER_LOOP:
             ; 0 out the buffer before every read
-            XOR CX, CX
+            XOR CX, CX ; reset CX which is the max similarityu for that word
             PUSH OFFSET BUF_W2C
             PUSH MAX_SIZE
             CALL CLEAR_BUFFER
@@ -334,9 +340,17 @@ STATISTICS:
 
             PRINT_STRING MSG_SDONE
             JMP START_MENU
-    TRIANGLE:
 
-    EXIT_Q:
+
+TRIANGLE:
+    CALL RUN_TRIANGLE_MODE
+
+    CMP AX,1
+    JE EXIT_Q ; if the user pressed Q
+    
+    JMP TRIANGLE ; else loop back tostart
+
+EXIT_Q:
 
 
 ; your code ends here

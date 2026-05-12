@@ -1,5 +1,7 @@
 ; Anton Razvan-Stefan ; Group 30415
 
+; easier to have them like this when writing the main logic
+
 ; READ_STRING BUF 
 ; PRINT_STRING MESSAGE                           ; before calling this, string HAS to end with $ or better: 13, 10, '$' (CRLF)
 ; PRINT_CHAR CHAR                                ; we will use this to print a number
