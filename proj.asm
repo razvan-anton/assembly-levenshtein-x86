@@ -351,7 +351,11 @@ TRIANGLE:
     JMP TRIANGLE ; else loop back tostart
 
 EXIT_Q:
-
+    ;exit dos interrupt
+    PRINT_STRING MSG_EXIT
+    MOV AH,4CH
+    XOR AL,AL
+    INT 21H
 
 ; your code ends here
 RET
