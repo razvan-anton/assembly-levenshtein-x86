@@ -326,9 +326,9 @@ CALC_SIMILARITY PROC FAR
     MOV BP,SP
     PUSH BX
     PUSH CX
-    PUSH DX          ; !!! Protect DX because LEV uses it
+    PUSH DX     
     PUSH SI
-    PUSH DI          ; !!! Replaced non-existent AC with DI
+    PUSH DI      
 
     MOV BX,[BP+6]    ; ptr a
     MOV CX,[BP+8]    ; len(a)
@@ -343,7 +343,7 @@ CALC_SIMILARITY PROC FAR
 
     ; now DX has lev(a,b)
     
-    ; !!! We must park the LEV result on the stack because MAX overwrites registers
+    ; push dx cuz MAX will overwrite it
     PUSH DX          
 
     PUSH CX
@@ -351,7 +351,7 @@ CALC_SIMILARITY PROC FAR
     CALL MAX
     ;now AX has max
 
-    ; !!! Retrieve the LEV result into BX for the math
+    ; get the LEV res into BX
     POP BX           
     ;now AX has max and BX has lev
 
@@ -368,10 +368,10 @@ CALC_SIMILARITY PROC FAR
     JMP END_PROC_CALC_SIMILARITY
 
     CONTINUE_PROC_CALC_SIMILARITY:
-    SUB AX,BX        ; !!! AX = Max - Lev
-    MOV BL,100       ; !!! Set multiplier
-    MUL BL           ; !!! AX = AL * 100 (Math is now scaled)
-    DIV CL           ; !!! AX / CL -> AL (Quotient), AH (Remainder)
+    SUB AX,BX        ; AX = Max - Lev
+    MOV BL,100       
+    MUL BL           ; AX = AL * 100
+    DIV CL          
     XOR AH,AH ; to get rid of the remainder
 
     END_PROC_CALC_SIMILARITY:
@@ -581,7 +581,7 @@ LEV PROC FAR
     ;workflow: 1: call first lev, push DX to stack
     ; 2: call 2nd lev, pop DX into BX and cmp them; then put the min into DX and push it
     ; 3: call 3rd lev, pop DX into BX, cmp them, store min in DX
-    ; inc AX
+    ; inc DX
     ; exit
 
     ;call lev(tail(a),b)

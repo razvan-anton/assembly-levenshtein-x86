@@ -69,7 +69,7 @@ START_MENU:
     ; using the conditioanl jumps like this to avoid the limited jump length of conditional jumps
     MOV AL,[IN_MENU+2] ; move first letter into AL to check
 
-    ;check only by 1st letter
+    ;check the mode only by 1st letter
     CMP AL,"i"
     JNE NOT_INTERACTIVE
     JMP INTERACTIVE
@@ -100,8 +100,9 @@ START_MENU:
     INTERACTIVE:
         PRINT_STRING MSG_INTR
 
+        ; removed!
         ; clear buffers before reading ; actaully it is redundant and 
-        ; this was also the wrong way to do it so I didn't do it anymore
+        ; this was also the wrong way to do it so I didn't do it anymore ( see debugstory )
         ; PUSH OFFSET IN_WORD_A
         ; PUSH 66 
         ; CALL CLEAR_BUFFER
